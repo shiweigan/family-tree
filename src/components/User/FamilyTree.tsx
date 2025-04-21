@@ -7,10 +7,8 @@ interface FamilyMember {
     parentId: number | null;
     age: number;
     gender: string;
-}
-
-interface FamilyMemberNode extends FamilyMember {
-    children?: FamilyMemberNode[];
+    avatar?: string;
+    children?: FamilyMember[];
 }
 
 // 示例数据
@@ -20,12 +18,13 @@ const familyData: FamilyMember[] = [
     { id: 3, name: '叔叔', parentId: 1, age: 48, gender: 'male' },
     { id: 4, name: '我', parentId: 2, age: 25, gender: 'male' },
     { id: 5, name: '妹妹', parentId: 2, age: 20, gender: 'female' },
+    { id: 6, name: '弟弟', parentId: 2, age: 16, gender: 'male' },
 ];
 
 // 构建树形结构
-const buildFamilyTree = (data: FamilyMember[]): FamilyMemberNode[] => {
-    const map = new Map<number, FamilyMemberNode>();
-    const roots: FamilyMemberNode[] = [];
+const buildFamilyTree = (data: FamilyMember[]): FamilyMember[] => {
+    const map = new Map<number, FamilyMember>();
+    const roots: FamilyMember[] = [];
 
     data.forEach(member => {
         map.set(member.id, { ...member, children: [] });
@@ -46,7 +45,7 @@ const buildFamilyTree = (data: FamilyMember[]): FamilyMemberNode[] => {
 };
 
 // 转换为 react-d3-tree 的数据格式
-const transformToTreeData = (nodes: FamilyMemberNode[]): any[] => {
+const transformToTreeData = (nodes: FamilyMember[]): any[] => {
     return nodes.map(node => ({
         name: node.name, // 仅显示姓名
         attributes: { ...node }, // 将详细信息存储在 attributes 中
@@ -77,38 +76,48 @@ const FamilyTree: React.FC = () => {
             <h1>家族树</h1>
             <Tree
                 data={treeData}
-                orientation="vertical" // 垂直方向展示
-                translate={{ x: 200, y: 50 }} // 调整树图位置
-                pathFunc="elbow" // 使用折线连接
+                orientation="vertical"
+                translate={{ x: 200, y: 50 }}
+                pathFunc="elbow"
                 renderCustomNodeElement={(rd3tProps) => {
-                    // 动态调整节点大小和文字大小
                     const isFemale = rd3tProps.nodeDatum.attributes?.gender === 'female';
-                    const nodeWidth = window.innerWidth < 768 ? 80 : 100; // 小屏幕时缩小节点宽度
-                    const nodeHeight = window.innerWidth < 768 ? 40 : 50; // 小屏幕时缩小节点高度
-                    const fontSize = window.innerWidth < 768 ? '12px' : '14px'; // 小屏幕时缩小字体大小
+                    const avatar = rd3tProps.nodeDatum.attributes?.avatar || 'src/img/default_avatar.png';
+                    const radius = window.innerWidth < 768 ? 24 : 32;
+                    const fontSize = window.innerWidth < 768 ? '12px' : '14px';
+                    // 边框颜色：男性蓝色，女性粉色
+                    const borderColor = isFemale ? '#ff69b4' : '#4682b4';
 
                     return (
                         <g onClick={() => handleNodeClick(rd3tProps.nodeDatum)}>
-                            {/* 方形节点 */}
-                            <rect
-                                width={nodeWidth}
-                                height={nodeHeight}
-                                x={-nodeWidth / 2}
-                                y={-nodeHeight / 2}
-                                fill={isFemale ? '#ffc0cb' : '#f0f8ff'} // 女性节点为粉色，其他为浅蓝色
-                                stroke="#4682b4" // 深蓝色边框
-                                strokeWidth={1.2} // 边框宽度
-                                rx={8} // 圆角矩形
-                                ry={8}
+                            {/* 圆形头像 */}
+                            <clipPath id={`avatar-clip-${rd3tProps.nodeDatum.attributes?.id}`}>
+                                <circle cx={0} cy={0} r={radius} />
+                            </clipPath>
+                            <circle
+                                cx={0}
+                                cy={0}
+                                r={radius}
+                                fill={isFemale ? '#ffc0cb' : '#cce6ff'}
+                                stroke={borderColor}
+                                strokeWidth={1}
+                            />
+                            <image
+                                href={String(avatar)}
+                                x={-radius}
+                                y={-radius}
+                                width={radius * 2}
+                                height={radius * 2}
+                                clipPath={`url(#avatar-clip-${rd3tProps.nodeDatum.attributes?.id})`}
                             />
                             {/* 姓名文本 */}
                             <text
                                 x={0}
-                                y={5}
+                                y={radius + 18}
                                 textAnchor="middle"
                                 style={{
-                                    fontSize: fontSize,
-                                    fill: '#333', // 深灰色文字
+                                    fontSize,
+                                    fill: '#333',
+                                    fontFamily: '微软雅黑, Microsoft YaHei, sans-serif'
                                 }}
                             >
                                 {rd3tProps.nodeDatum.name}
@@ -132,7 +141,8 @@ const FamilyTree: React.FC = () => {
                         boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)', // 阴影
                         zIndex: 1000,
                         maxWidth: '90%', // 弹窗宽度适配小屏幕
-                        textAlign: 'center', // 文本居中
+                        textAlign: 'left', // 文本居中
+                        fontFamily: '微软雅黑, Microsoft YaHei, sans-serif'
                     }}
                 >
                     <h2 style={{ marginBottom: '15px', color: '#333' }}>成员详细信息</h2>
