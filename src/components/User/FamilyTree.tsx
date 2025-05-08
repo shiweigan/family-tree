@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Tree from 'react-d3-tree';
+import axios from 'axios';
+import styles from '../../styles/FamilyTree.module.css';
 
 interface FamilyMember {
     id: number;
@@ -11,24 +13,6 @@ interface FamilyMember {
     children?: FamilyMember[];
     alias?: string; // 可选属性，表示别名
 }
-
-// 示例数据
-const familyData: FamilyMember[] = [
-    { id: 1, name: '祖父', parentId: null, age: 80, gender: 'male', alias: '七厝公' },
-    { id: 2, name: '父亲', parentId: 1, age: 50, gender: 'male', alias: '测试' },
-    { id: 3, name: '叔叔', parentId: 1, age: 48, gender: 'male' },
-    { id: 4, name: '我', parentId: 2, age: 25, gender: 'male', alias: '是未敢' },
-    { id: 5, name: '妹妹', parentId: 2, age: 20, gender: 'female' },
-    { id: 6, name: '弟弟', parentId: 2, age: 16, gender: 'male' },
-    { id: 7, name: '堂哥', parentId: 3, age: 25, gender: 'male' },
-    { id: 8, name: '堂妹', parentId: 3, age: 20, gender: 'female' },
-    { id: 9, name: '堂弟', parentId: 3, age: 16, gender: 'male' },
-    { id: 10, name: '伯伯', parentId: 1, age: 48, gender: 'male' },
-    { id: 11, name: '堂哥', parentId: 10, age: 25, gender: 'male' },
-    { id: 12, name: '堂妹', parentId: 10, age: 20, gender: 'female' },
-    { id: 13, name: '堂弟', parentId: 10, age: 16, gender: 'male' },
-    { id: 14, name: '姑姑', parentId: 1, age: 48, gender: 'female' },
-];
 
 // 构建树形结构
 const buildFamilyTree = (data: FamilyMember[]): FamilyMember[] => {
@@ -63,36 +47,65 @@ const transformToTreeData = (nodes: FamilyMember[]): any[] => {
 };
 
 const FamilyTree: React.FC = () => {
+    const [familyData, setFamilyData] = useState<FamilyMember[]>([]);
+    const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedMember, setEditedMember] = useState<FamilyMember | null>(null);
+    const [isAddingChild, setIsAddingChild] = useState(false);
+    // 加载数据
+    useEffect(() => {
+        axios.get('http://localhost:3001/api/members').then(response => {
+            setFamilyData(response.data);
+            console.log('Family data loaded:', response.data); // 打印加载的数据
+        });
+    }, []);
+
     const familyTree = buildFamilyTree(familyData);
     const treeData = transformToTreeData(familyTree);
-
-    // 用于控制弹窗的状态
-    const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
 
     // 处理节点点击事件
     const handleNodeClick = (nodeData: any) => {
         setSelectedMember(nodeData.attributes); // 从 attributes 中获取详细信息
     };
 
+    // 添加成员
+    const addMember = (newMember: Omit<FamilyMember, 'id' | 'children'>) => {
+        axios.post('http://localhost:3001/api/members', newMember).then(response => {
+            setFamilyData([...familyData, { ...newMember, id: response.data.id, children: [] }]);
+        });
+    };
+
+    // 更新成员
+    const updateMember = (id: number, updatedFields: Partial<FamilyMember> | null) => {
+        if (!updatedFields) return; // 如果没有更新的字段，则返回
+        axios.put(`http://localhost:3001/api/members/${id}`, updatedFields).then(() => {
+            setFamilyData(familyData.map(member => (member.id === id ? { ...member, ...updatedFields } : member)));
+        });
+    };
+
+    // 删除成员
+    const deleteMember = (id: number) => {
+        // 增加modal弹窗提示
+        if (!window.confirm('确定要删除该成员及其子孙吗？')) {
+            return;
+        }
+        
+        axios.delete(`http://localhost:3001/api/members/${id}`).then(() => {
+            setFamilyData(familyData.filter(member => member.id !== id));
+            closeModal(); // 关闭弹窗
+        });
+    };
+
     // 关闭弹窗
     const closeModal = () => {
         setSelectedMember(null);
     };
-
+    if (familyData.length === 0) {
+        return <div>Loading...</div>; // 显示加载状态
+    }
     return (
-        <div
-            style={{
-                display: 'flex', // 使用 flex 布局
-                flexDirection: 'column', // 垂直方向排列
-                justifyContent: 'center', // 垂直居中
-                alignItems: 'center', // 水平居中
-                width: '100%', // 宽度占满屏幕
-                height: '100vh', // 高度占满屏幕
-                backgroundColor: '#f9f9f9', // 可选：设置背景颜色
-            }}
-        >
-            {/* <h1 style={{ textAlign: 'center', marginBottom: '20px' }}>家族树</h1> */}
-            <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+        <div className = {styles.container}>
+            <div className = {styles.treeContainer}>
                 <Tree
                     data={treeData}
                     orientation="vertical"
@@ -179,68 +192,74 @@ const FamilyTree: React.FC = () => {
 
             {/* 弹窗 */}
             {selectedMember && (
-                <div
-                    style={{
-                        position: 'fixed',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        backgroundColor: '#fff', // 白色背景
-                        padding: '20px 30px', // 内边距
-                        borderRadius: '10px', // 圆角
-                        boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)', // 阴影
-                        zIndex: 1000,
-                        maxWidth: '90%', // 弹窗宽度适配小屏幕
-                        textAlign: 'left', // 文本居中
-                        fontFamily: '微软雅黑, Microsoft YaHei, sans-serif',
-                    }}
-                >
-                    <h3 style={{ marginBottom: '15px', color: '#333' }}>成员详细信息</h3>
-                    <p style={{ margin: '10px 0', fontSize: '16px', color: '#555' }}>
-                        <strong>姓名：</strong>{selectedMember.name}
-                    </p>
-                    <p style={{ margin: '10px 0', fontSize: '16px', color: '#555' }}>
-                        <strong>别称：</strong>{selectedMember.alias || '无'}
-                    </p>
-                    <p style={{ margin: '10px 0', fontSize: '16px', color: '#555' }}>
-                        <strong>性别：</strong>{selectedMember.gender === 'male' ? '男' : '女'}
-                    </p>
-                    <p style={{ margin: '10px 0', fontSize: '16px', color: '#555' }}>
-                        <strong>年龄：</strong>{selectedMember.age} 岁
-                    </p>
-                    <button
-                        onClick={closeModal}
-                        style={{
-                            display: 'block', // 让按钮成为块级元素
-                            margin: '20px auto 0', // 上边距 20px，水平居中
-                            padding: '10px 20px',
-                            backgroundColor: '#007bff', // 按钮背景色
-                            color: '#fff', // 按钮文字颜色
-                            border: 'none',
-                            borderRadius: '5px', // 按钮圆角
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                        }}
-                    >
-                        关闭
-                    </button>
+                <div className={styles.modal}>
+                    {/* 关闭图标 */}
+                    <span className={styles.closeIcon} onClick={closeModal}>×</span>
+                    {/* 编辑模式或新增子女模式 */}
+                    {isEditing || isAddingChild ? (
+                        <form
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                if (isAddingChild) {
+                                    // 新增子女
+                                    addMember({
+                                        name: editedMember!.name,
+                                        parentId: selectedMember!.id,
+                                        age: editedMember!.age,
+                                        gender: editedMember!.gender,
+                                        avatar: editedMember!.avatar,
+                                        alias: editedMember!.alias,
+                                    });
+                                } else {
+                                    updateMember(selectedMember.id, editedMember);
+                                    setSelectedMember({ ...selectedMember, ...editedMember }); // 更新弹窗中的数据
+                                }
+                                setIsEditing(false);
+                                setIsAddingChild(false);
+                            }}
+                        >
+                            <h3 className={styles.modalTitle}>{isAddingChild ? '新增子女' : '编辑成员信息'}</h3>
+                            <label><b>姓名：</b><input className={styles.inputField} type="text" value={editedMember?.name}
+                                    onChange={(e) => setEditedMember({ ...editedMember!, name: e.target.value })}/>
+                            </label>
+                            <label><b>别称：</b><input className={styles.inputField} type="text" value={editedMember?.alias || ''}
+                                    onChange={(e) => setEditedMember({ ...editedMember!, alias: e.target.value })}/>
+                            </label>
+                            <label><b>年龄：</b><input className={styles.inputField} type="number" value={editedMember?.age}
+                                    onChange={(e) => setEditedMember({ ...editedMember!, age: parseInt(e.target.value, 10) })}/>
+                            </label>
+                            <label><b>性别：</b><select className={styles.inputField} value={editedMember?.gender}
+                                    onChange={(e) => setEditedMember({ ...editedMember!, gender: e.target.value })}>
+                                    <option value="male">男</option>
+                                    <option value="female">女</option>
+                                </select>
+                            </label>
+                            <button type="submit" className={`${styles.button} ${styles.buttonSave}`}>保存</button>
+                            <button type="button" onClick={() => {setIsEditing(false); setIsAddingChild(false);}} className={`${styles.button} ${styles.buttonCancel}`}>取消</button>
+                        </form>
+                    ) : (
+                        <>
+                            <h3 style={{ marginBottom: '15px', color: '#333', textAlign: 'center' }}>成员详细信息</h3>
+                            <p><strong>姓名：</strong>{selectedMember.name}</p>
+                            <p><strong>别称：</strong>{selectedMember.alias || '无'}</p>
+                            <p><strong>性别：</strong>{selectedMember.gender === 'male' ? '男' : '女'}</p>
+                            <p><strong>年龄：</strong>{selectedMember.age} 岁</p>
+                            <button onClick={() => deleteMember(selectedMember.id)} className={`${styles.button} ${styles.buttonDelete}`}>删除</button>
+                            <button onClick={() => {setIsEditing(true); setEditedMember(selectedMember);}} className={`${styles.button} ${styles.buttonEdit}`}>编辑</button>
+                            <button onClick={() => {
+                                setIsAddingChild(true);
+                                setEditedMember({id: 0,name: '',parentId: selectedMember.id,age: 0,gender: 'male',avatar: '',alias: '',children: [],});
+                            }}
+                            className={`${styles.button} ${styles.buttonAddChild}`}
+                        >新增子女</button>
+                        </>
+                    )}
                 </div>
             )}
 
             {/* 背景遮罩 */}
             {selectedMember && (
-                <div
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                        zIndex: 999,
-                    }}
-                    onClick={closeModal}
-                />
+                <div className={styles.overlay} onClick={closeModal}/>
             )}
         </div>
     );
