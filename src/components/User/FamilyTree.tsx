@@ -84,24 +84,94 @@ const FamilyTree: React.FC = () => {
     };
 
     // 删除成员
-    const deleteMember = (id: number) => {
+    const deleteMember = (member: FamilyMember) => {
         // 增加modal弹窗提示
         if (!window.confirm('确定要删除该成员及其子孙吗？')) {
             return;
         }
-        
-        axios.delete(`http://localhost:3001/api/members/${id}`).then(() => {
-            setFamilyData(familyData.filter(member => member.id !== id));
-            closeModal(); // 关闭弹窗
-        });
+
+        const deleteId: number[] = [];
+        const deleteChildren = (member: FamilyMember) => {
+             // 删除当前成员
+            axios.delete(`http://localhost:3001/api/members/${member.id}`);
+            deleteId.push(member.id);
+            // 递归删除子孙成员
+            if (member.children && member.children.length > 0) {
+                member.children.forEach(child => {
+                    deleteChildren(child); // 递归删除子孙
+                });
+            }
+        };
+        deleteChildren(member);
+        setFamilyData(familyData.filter(member => !deleteId.includes(member.id)));
+        closeModal(); // 关闭弹窗
     };
 
     // 关闭弹窗
     const closeModal = () => {
         setSelectedMember(null);
+        setIsEditing(false);
+        setIsAddingChild(false);
     };
-    if (familyData.length === 0) {
-        return <div>Loading...</div>; // 显示加载状态
+    // 如果没有根节点或数据为空，显示新增家族成员按钮
+    if (familyData.length === 0 || !familyData.some(member => member.parentId === null)) {
+        return (
+            <>
+                <div className={styles.emptyContainer}>
+                    <h3 className={styles.emptyMessage}>家族树为空，请添加家族成员</h3>
+                    <button
+                        onClick={() => {setIsAddingChild(true);setEditedMember({ id: 0, name: '', parentId: null, age: 0, gender: 'male', avatar: '', alias: '', children: [] });}}
+                        className={`${styles.button} ${styles.buttonAddChild}`}>新增家族成员
+                    </button>
+                </div>
+            
+                {/* 弹窗 */}
+                {isAddingChild && (
+                    <div>
+                    <div className={styles.modal}>
+                        {/* 关闭图标 */}
+                        <span className={styles.closeIcon} onClick={closeModal}>×</span>
+                        {/* 新增根节点 */}
+                        <form
+                            onSubmit={(e) => {
+                                e.preventDefault();
+                                addMember({
+                                    name: editedMember!.name,
+                                    parentId: null,
+                                    age: editedMember!.age,
+                                    gender: editedMember!.gender,
+                                    avatar: editedMember!.avatar,
+                                    alias: editedMember!.alias,
+                                });
+                                setIsAddingChild(false);
+                            }}
+                        >
+                            <h3 className={styles.modalTitle}>新增成员</h3>
+                            <label><span className={styles.inputNotNull}>*</span><b>姓名：</b><input className={styles.inputField} type="text" value={editedMember?.name}
+                                    onChange={(e) => setEditedMember({ ...editedMember!, name: e.target.value })} required/>
+                            </label>
+                            <label><b>别称：</b><input className={styles.inputField} type="text" value={editedMember?.alias || ''}
+                                    onChange={(e) => setEditedMember({ ...editedMember!, alias: e.target.value })}/>
+                            </label>
+                            <label><span className={styles.inputNotNull}>*</span><b>年龄：</b><input className={styles.inputField} type="number" value={editedMember?.age}
+                                    onChange={(e) => setEditedMember({ ...editedMember!, age: parseInt(e.target.value, 10) })} required/>
+                            </label>
+                            <label><span className={styles.inputNotNull}>*</span><b>性别：</b><select className={styles.inputField} value={editedMember?.gender}
+                                    onChange={(e) => setEditedMember({ ...editedMember!, gender: e.target.value })}>
+                                    <option value="male">男</option>
+                                    <option value="female">女</option>
+                                </select>
+                            </label>
+                            <button type="submit" className={`${styles.button} ${styles.buttonSave}`}>保存</button>
+                            <button type="button" onClick={closeModal} className={`${styles.button} ${styles.buttonCancel}`}>取消</button>
+                        </form>
+                    </div>
+                    {/* 背景遮罩 */}
+                    <div className={styles.overlay} onClick={closeModal}/>
+                    </div>
+                )}
+            </>
+        );
     }
     return (
         <div className = {styles.container}>
@@ -219,23 +289,25 @@ const FamilyTree: React.FC = () => {
                             }}
                         >
                             <h3 className={styles.modalTitle}>{isAddingChild ? '新增子女' : '编辑成员信息'}</h3>
-                            <label><b>姓名：</b><input className={styles.inputField} type="text" value={editedMember?.name}
-                                    onChange={(e) => setEditedMember({ ...editedMember!, name: e.target.value })}/>
+                            <label>
+                                <span className={styles.inputNotNull}>*</span><b>姓名：</b>
+                                <input className={styles.inputField} type="text" value={editedMember?.name}
+                                    onChange={(e) => setEditedMember({ ...editedMember!, name: e.target.value })} required/>
                             </label>
                             <label><b>别称：</b><input className={styles.inputField} type="text" value={editedMember?.alias || ''}
                                     onChange={(e) => setEditedMember({ ...editedMember!, alias: e.target.value })}/>
                             </label>
-                            <label><b>年龄：</b><input className={styles.inputField} type="number" value={editedMember?.age}
-                                    onChange={(e) => setEditedMember({ ...editedMember!, age: parseInt(e.target.value, 10) })}/>
+                            <label><span className={styles.inputNotNull}>*</span><b>年龄：</b><input className={styles.inputField} type="number" value={editedMember?.age}
+                                    onChange={(e) => setEditedMember({ ...editedMember!, age: parseInt(e.target.value, 10) })} required/>
                             </label>
-                            <label><b>性别：</b><select className={styles.inputField} value={editedMember?.gender}
+                            <label><span className={styles.inputNotNull}>*</span><b>性别：</b><select className={styles.inputField} value={editedMember?.gender}
                                     onChange={(e) => setEditedMember({ ...editedMember!, gender: e.target.value })}>
                                     <option value="male">男</option>
                                     <option value="female">女</option>
                                 </select>
                             </label>
                             <button type="submit" className={`${styles.button} ${styles.buttonSave}`}>保存</button>
-                            <button type="button" onClick={() => {setIsEditing(false); setIsAddingChild(false);}} className={`${styles.button} ${styles.buttonCancel}`}>取消</button>
+                            <button type="button" onClick={()=>{isAddingChild ? setIsAddingChild(false) : setIsEditing(false)}} className={`${styles.button} ${styles.buttonCancel}`}>取消</button>
                         </form>
                     ) : (
                         <>
@@ -244,14 +316,13 @@ const FamilyTree: React.FC = () => {
                             <p><strong>别称：</strong>{selectedMember.alias || '无'}</p>
                             <p><strong>性别：</strong>{selectedMember.gender === 'male' ? '男' : '女'}</p>
                             <p><strong>年龄：</strong>{selectedMember.age} 岁</p>
-                            <button onClick={() => deleteMember(selectedMember.id)} className={`${styles.button} ${styles.buttonDelete}`}>删除</button>
+                            <button onClick={() => deleteMember(selectedMember)} className={`${styles.button} ${styles.buttonDelete}`}>删除</button>
                             <button onClick={() => {setIsEditing(true); setEditedMember(selectedMember);}} className={`${styles.button} ${styles.buttonEdit}`}>编辑</button>
                             <button onClick={() => {
-                                setIsAddingChild(true);
-                                setEditedMember({id: 0,name: '',parentId: selectedMember.id,age: 0,gender: 'male',avatar: '',alias: '',children: [],});
-                            }}
-                            className={`${styles.button} ${styles.buttonAddChild}`}
-                        >新增子女</button>
+                                    setIsAddingChild(true);
+                                    setEditedMember({id: 0,name: '',parentId: selectedMember.id,age: 0,gender: 'male',avatar: '',alias: '',children: [],});
+                                }} className={`${styles.button} ${styles.buttonAddChild}`}>新增子女
+                            </button>
                         </>
                     )}
                 </div>

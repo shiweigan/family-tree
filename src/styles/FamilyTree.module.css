@@ -66,6 +66,11 @@
     color: #fff;
 }
 
+/* 非空字段样式 */
+.inputNotNull {
+    color: red;
+}
+
 .buttonDelete {
     background-color: #dc3545;
 }
